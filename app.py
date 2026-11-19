@@ -11,7 +11,13 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 # ------------------------- SETTINGS (edit these) -------------------------
 APP_NAME = "FIFA WORLD"
 MODEL_ID = "shalinii07/flan-t5-transformer-paper-slm"
-DATA_DIR = Path(__file__).parent / "dataset"
+DATA_DIR = Path(__file__).parent
+
+def find_csv(name):
+    for p in (DATA_DIR / "dataset" / name, DATA_DIR / name):
+        if p.exists():
+            return p
+    return None
 THRESHOLD = 0.12          # scope-guard strictness (calibrate in Step 6)
 SHOW_SCORE = False        # set True while calibrating
 OTHER_PLATFORM = "Google (google.com) or ChatGPT (chatgpt.com)"   # <- change to your platform
@@ -46,16 +52,19 @@ def load_model():
 
 @st.cache_resource(show_spinner=False)
 def load_scope_guard():
-    frames = []
+    docs = []
     for name in ["train.csv", "validation.csv", "test.csv"]:
-        p = DATA_DIR / name
-        if p.exists():
-            frames.append(pd.read_csv(p))
-    if not frames:
-        st.error(f"No dataset CSVs found in {DATA_DIR}. Put train.csv, validation.csv and test.csv there.")
+        p = find_csv(name)
+        if p is not None:
+            df = pd.read_csv(p)
+            docs += (df["input_text"].astype(str) + " " + df["target_text"].astype(str)).tolist()
+    p = find_csv("FIFA_DATASET_TRANSFORMATION.csv")
+    if p is not None:
+        raw = pd.read_csv(p, encoding="utf-8-sig")
+        docs += (raw["section"].fillna("").astype(str) + " " + raw["content"].fillna("").astype(str)).tolist()
+    if not docs:
+        st.error("No dataset CSV files found in the repository.")
         st.stop()
-    df = pd.concat(frames).drop_duplicates().reset_index(drop=True)
-    docs = (df["input_text"] + " " + df["target_text"]).tolist()
     vec = TfidfVectorizer(stop_words="english", ngram_range=(1, 2), sublinear_tf=True)
     return vec, vec.fit_transform(docs)
 
@@ -103,7 +112,7 @@ if not st.session_state.messages:
     <div class="hero">
       <div style="font-size:4rem">⚽</div>
       <h1>{APP_NAME}</h1>
-      <p>Ask me about the <b>Attention Is All You Need</b> research paper and I'll explain it simply.</p>
+            <p>Ask me about the <b>Attention Is All You Need</b> paper and how it is adapted to <b>FIFA player data</b>.</p>
     </div>
     """, unsafe_allow_html=True)
 
